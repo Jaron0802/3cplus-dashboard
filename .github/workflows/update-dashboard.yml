@@ -1,0 +1,48 @@
+name: Update and Deploy Dashboard
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'  # This needed fixing - the asterisks were incomplete
+  # Allow manual triggering
+  workflow_dispatch:
+  # Run on pushes to main branch
+  push:
+    branches:
+      - main
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flask flask-frozen pandas plotly nltk matplotlib
+        # Download NLTK stopwords
+        python -c "import nltk; nltk.download('stopwords')"
+        
+    - name: Fetch latest data (optional)
+      if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+      run: |
+        # If you have an API endpoint, uncomment and modify:
+        # curl -o data/survey_data.csv ${{ secrets.API_URL }}
+        # For now, we'll just use the existing data file
+        mkdir -p data
+        
+    - name: Generate static dashboard
+      run: |
+        python simple_static_generator.py
+        
+    - name: Deploy to GitHub Pages
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: docs  # Changed from static_dashboard to match our output directory
+        branch: gh-pages

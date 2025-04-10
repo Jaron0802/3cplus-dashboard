@@ -67,7 +67,20 @@ jobs:
         
     - name: Generate static dashboard
       run: |
+        # First, let's print out some debug info
+        echo "Current directory structure:"
+        find . -type d -not -path "*/\.*" | sort
+        
+        # Make sure the data directory exists and has the correct CSV
+        echo "Data directory contents:"
+        ls -la data/
+        
+        # Generate the static site
         python simple_static_generator.py
+        
+        # Verify what was generated
+        echo "Generated files in docs directory:"
+        find docs -type f | sort
         
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4

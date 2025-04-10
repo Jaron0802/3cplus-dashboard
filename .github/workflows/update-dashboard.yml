@@ -28,6 +28,18 @@ jobs:
         pip install flask Frozen-Flask pandas plotly nltk matplotlib markupsafe
         # Download NLTK stopwords
         python -c "import nltk; nltk.download('stopwords')"
+    - name: Ensure data directory exists
+      run: |
+        mkdir -p data
+        
+    - name: Check for existing data file
+      id: check_data
+      run: |
+        if [ -f "data/survey_data.csv" ]; then
+          echo "data_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "data_exists=false" >> $GITHUB_OUTPUT
+        fi
         
     - name: Fetch latest data (optional)
       if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}

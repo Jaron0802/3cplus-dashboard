@@ -868,7 +868,7 @@ def generate_static_site():
     app.config['FREEZER_RELATIVE_URLS'] = True
     
     # Create the output directory
-    os.makedirs('static_dashboard', exist_ok=True)
+    os.makedirs('docs', exist_ok=True)
     
     # Ensure data directory exists
     os.makedirs('data', exist_ok=True)

@@ -56,17 +56,6 @@ jobs:
         else
           echo "\nWARNING: data/survey_data.csv does not exist!"
         fi
-        
-    - name: Debug Python script
-      run: |
-        echo "Adding debug code to script..."
-        # Add debugging at the top of the script
-        sed -i '1i import sys\nprint("Python version:", sys.version)' simple_static_generator.py
-        
-        # Add debug code in the SurveyAnalyzer class
-        sed -i '/def load_data/a\\        print("\\n\\nAttempting to load CSV from:", self.csv_path)\\n        import os\\n        print("File exists:", os.path.exists(self.csv_path))\\n        if os.path.exists(self.csv_path):\\n            print("File size:", os.path.getsize(self.csv_path))\\n            print("First 5 lines:")\\n            with open(self.csv_path, "r") as f:\\n                for i, line in enumerate(f):\\n                    if i < 5:\\n                        print(line.strip())\\n                    else:\\n                        break\\n        print("\\n")' simple_static_generator.py
-        
-
 
     - name: Fetch latest data (optional)
       if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}

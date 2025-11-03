@@ -184,7 +184,7 @@ class SurveyAnalyzer:
                 counts.columns = ['Response', 'Count']
                 counts['Context'] = ctx['label']
                 queerphobia_data.append(counts)
-            
+
             if queerphobia_data:
                 queerphobia_df = pd.concat(queerphobia_data)
                 # Convert to plain Python lists
@@ -199,41 +199,75 @@ class SurveyAnalyzer:
                                         title='Observations of Queerphobia in Different Contexts',
                                         color_discrete_map={'Yes': 'purple', 'No': 'red', 'Unsure': 'gold'})
                 charts['queerphobia'] = queerphobia_fig
+
+        # Transphobia observations
+        if all(col in self.df.columns for col in ['Q28_1', 'Q28_2', 'Q28_3', 'Q28_4']):
+            # Prepare observation data
+            contexts = [
+                {'id': 'Q28_1', 'label': 'Campus Community'},
+                {'id': 'Q28_2', 'label': 'Classroom'},
+                {'id': 'Q28_3', 'label': 'Conversations with Peers'},
+                {'id': 'Q28_4', 'label': 'Conversations with Staff/Faculty'}
+            ]
+            transphobia_data = []
+            for ctx in contexts:
+                counts = self.df[ctx['id']].value_counts().reset_index()
+                counts.columns = ['Response', 'Count']
+                counts['Context'] = ctx['label']
+                transphobia_data.append(counts)
+
+            if transphobia_data:
+                transphobia_df = pd.concat(transphobia_data)
+                # Convert to plain Python lists
+                transphobia_df = transphobia_df.copy()
+                transphobia_df['Count'] = transphobia_df['Count'].astype(int)
+                transphobia_plot_data = pd.DataFrame({
+                    'Context': transphobia_df['Context'].tolist(),
+                    'Count': transphobia_df['Count'].tolist(),
+                    'Response': transphobia_df['Response'].tolist()
+                })
+                transphobia_fig = px.bar(transphobia_plot_data, x='Context', y='Count', color='Response',
+                                        title='Observations of Transphobia in Different Contexts',
+                                        color_discrete_map={'Yes': 'blue', 'No': 'red', 'Unsure': 'gold'})
+                charts['transphobia'] = transphobia_fig
         
         # Comparative analysis
         contexts = [
-            {'misogyny': 'Q10_1', 'queerphobia': 'Q19_1', 'name': 'Campus Community'},
-            {'misogyny': 'Q10_2', 'queerphobia': 'Q19_2', 'name': 'Classroom'},
-            {'misogyny': 'Q10_3', 'queerphobia': 'Q19_3', 'name': 'Conversations with Peers'},
-            {'misogyny': 'Q10_4', 'queerphobia': 'Q19_4', 'name': 'Conversations with Staff/Faculty'}
+            {'misogyny': 'Q10_1', 'queerphobia': 'Q19_1', 'transphobia': 'Q28_1', 'name': 'Campus Community'},
+            {'misogyny': 'Q10_2', 'queerphobia': 'Q19_2', 'transphobia': 'Q28_2', 'name': 'Classroom'},
+            {'misogyny': 'Q10_3', 'queerphobia': 'Q19_3', 'transphobia': 'Q28_3', 'name': 'Conversations with Peers'},
+            {'misogyny': 'Q10_4', 'queerphobia': 'Q19_4', 'transphobia': 'Q28_4', 'name': 'Conversations with Staff/Faculty'}
         ]
-        
+
         comparison_data = []
         for ctx in contexts:
-            if all(col in self.df.columns for col in [ctx['misogyny'], ctx['queerphobia']]):
+            if all(col in self.df.columns for col in [ctx['misogyny'], ctx['queerphobia'], ctx['transphobia']]):
                 m_yes = self.df[ctx['misogyny']].value_counts().get('Yes', 0)
                 m_total = self.df[ctx['misogyny']].notna().sum()
-                
+
                 q_yes = self.df[ctx['queerphobia']].value_counts().get('Yes', 0)
                 q_total = self.df[ctx['queerphobia']].notna().sum()
-                
-                if m_total > 0 and q_total > 0:
+
+                t_yes = self.df[ctx['transphobia']].value_counts().get('Yes', 0)
+                t_total = self.df[ctx['transphobia']].notna().sum()
+
+                if m_total > 0 and q_total > 0 and t_total > 0:
                     comparison_data.append({
                         'Context': ctx['name'],
                         'Misogyny Yes %': (m_yes / m_total) * 100,
                         'Queerphobia Yes %': (q_yes / q_total) * 100,
-                        'Difference': (m_yes / m_total) * 100 - (q_yes / q_total) * 100
+                        'Transphobia Yes %': (t_yes / t_total) * 100
                     })
-        
+
         if comparison_data:
             comparison_df = pd.DataFrame(comparison_data)
             # Bar chart
-            comp_bar_fig = px.bar(comparison_df, x='Context', 
-                                y=['Misogyny Yes %', 'Queerphobia Yes %'],
-                                title='Comparison of Misogyny and Queerphobia by Context',
+            comp_bar_fig = px.bar(comparison_df, x='Context',
+                                y=['Misogyny Yes %', 'Queerphobia Yes %', 'Transphobia Yes %'],
+                                title='Comparison of Misogyny, Queerphobia, and Transphobia by Context',
                                 barmode='group',
-                                color_discrete_map={'Misogyny Yes %': 'green', 'Queerphobia Yes %': 'purple'})
-            
+                                color_discrete_map={'Misogyny Yes %': 'green', 'Queerphobia Yes %': 'purple', 'Transphobia Yes %': 'blue'})
+
             # Radar chart
             radar_fig = go.Figure()
             radar_fig.add_trace(go.Scatterpolar(
@@ -250,19 +284,32 @@ class SurveyAnalyzer:
                 name='Queerphobia',
                 line_color='purple'
             ))
+            radar_fig.add_trace(go.Scatterpolar(
+                r=comparison_df['Transphobia Yes %'].tolist(),
+                theta=comparison_df['Context'].tolist(),
+                fill='toself',
+                name='Transphobia',
+                line_color='blue'
+            ))
             radar_fig.update_layout(
                 polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
                 showlegend=True,
-                title="Radar Chart: Misogyny vs Queerphobia by Context"
+                title="Radar Chart: Misogyny vs Queerphobia vs Transphobia by Context"
             )
-            
+
             charts['comparison_bar'] = comp_bar_fig
             charts['comparison_radar'] = radar_fig
             charts['comparison_data'] = comparison_df.to_dict('records')
             charts['misogyny_mean'] = comparison_df['Misogyny Yes %'].mean()
             charts['queerphobia_mean'] = comparison_df['Queerphobia Yes %'].mean()
-            greatest_diff_idx = (comparison_df['Misogyny Yes %'] - comparison_df['Queerphobia Yes %']).abs().idxmax()
-            charts['greatest_diff_context'] = comparison_df.loc[greatest_diff_idx, 'Context']
+            charts['transphobia_mean'] = comparison_df['Transphobia Yes %'].mean()
+            # Find which form has the highest mean
+            means = {
+                'Misogyny': charts['misogyny_mean'],
+                'Queerphobia': charts['queerphobia_mean'],
+                'Transphobia': charts['transphobia_mean']
+            }
+            charts['highest_mean_type'] = max(means, key=means.get)
         
         return charts
     
@@ -394,6 +441,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if active_page == 'queerphobia' %}active{% endif %}" href="queerphobia.html">Queerphobia Analysis</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if active_page == 'transphobia' %}active{% endif %}" href="transphobia.html">Transphobia Analysis</a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link {% if active_page == 'text-analysis' %}active{% endif %}" href="text-analysis.html">Text Analysis</a>
@@ -707,6 +757,92 @@ def queerphobia():
         scripts=Markup(rendered_scripts)
     )
 
+@app.route('/transphobia.html')
+def transphobia():
+    analyzer = SurveyAnalyzer('data/survey_data.csv')
+    charts = analyzer.get_charts_data()
+    text_analysis = analyzer.analyze_text('Q29_10_TEXT')
+
+    # Default values for the template
+    chart = go.Figure()
+    text_examples = []
+
+    if 'transphobia' in charts:
+        chart = charts['transphobia']
+
+    if text_analysis:
+        text_examples = text_analysis['sample_responses']
+
+    # Create the transphobia page content
+    content = """
+        <h2 class="mb-4">Transphobia Analysis</h2>
+
+        <!-- Main chart -->
+        <div class="row mb-4">
+            <div class="col-12 chart-container">
+                <div id="transphobia-chart"></div>
+            </div>
+        </div>
+
+        <!-- Text examples -->
+        <h4 class="mb-3">Selected Response Examples</h4>
+        {% if text_examples %}
+            {% for example in text_examples %}
+                <div class="sample-response">
+                    <h5>Response Example {{ loop.index }}</h5>
+                    <p>{{ example }}</p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No text responses available for the selected filters.</p>
+        {% endif %}
+    """
+
+    # Create the scripts for charts
+    scripts = """
+    <script>
+        // Render the transphobia observations chart
+        var transphobiaData = {{ transphobia_chart|safe }};
+        Plotly.newPlot('transphobia-chart', transphobiaData.data, transphobiaData.layout);
+    </script>
+    """
+
+    # Convert charts to JSON without binary encoding
+    def fig_to_json(fig):
+        import numpy as np
+        import base64
+        def decode_binary_arrays(obj):
+            if isinstance(obj, dict):
+                if 'dtype' in obj and 'bdata' in obj:
+                    binary_data = base64.b64decode(obj['bdata'])
+                    dtype = np.dtype(obj['dtype'])
+                    array = np.frombuffer(binary_data, dtype=dtype)
+                    return array.tolist()
+                else:
+                    return {k: decode_binary_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decode_binary_arrays(item) for item in obj]
+            return obj
+        fig_json_str = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        fig_dict = json.loads(fig_json_str)
+        fig_dict = decode_binary_arrays(fig_dict)
+        return json.dumps(fig_dict)
+
+    # Render content and scripts
+    rendered_content = render_template_string(content, text_examples=text_examples)
+    rendered_scripts = render_template_string(scripts,
+        transphobia_chart=fig_to_json(chart)
+    )
+
+    # Render the main template
+    return render_template_string(
+        HTML_TEMPLATE,
+        active_page='transphobia',
+        current_date=datetime.now().strftime('%B %d, %Y'),
+        content=Markup(rendered_content),
+        scripts=Markup(rendered_scripts)
+    )
+
 @app.route('/text-analysis.html')
 def text_analysis():
     analyzer = SurveyAnalyzer('data/survey_data.csv')
@@ -715,6 +851,7 @@ def text_analysis():
     text_fields = [
         {'label': 'Misogyny Experiences (Q11)', 'value': 'Q11_10_TEXT'},
         {'label': 'Queerphobia Experiences (Q20)', 'value': 'Q20_10_TEXT'},
+        {'label': 'Transphobia Experiences (Q29)', 'value': 'Q29_10_TEXT'},
         {'label': 'General Comments (Q40)', 'value': 'Q40'}
     ]
     
@@ -864,8 +1001,9 @@ def comparative():
     comparison_data = []
     misogyny_mean = 0
     queerphobia_mean = 0
-    greatest_diff_context = "N/A"
-    
+    transphobia_mean = 0
+    highest_mean_type = "N/A"
+
     # Check if comparison data is available
     if all(key in charts for key in ['comparison_bar', 'comparison_radar', 'comparison_data']):
         has_comparison_data = True
@@ -874,7 +1012,8 @@ def comparative():
         comparison_data = charts['comparison_data']
         misogyny_mean = charts.get('misogyny_mean', 0)
         queerphobia_mean = charts.get('queerphobia_mean', 0)
-        greatest_diff_context = charts.get('greatest_diff_context', "N/A")
+        transphobia_mean = charts.get('transphobia_mean', 0)
+        highest_mean_type = charts.get('highest_mean_type', "N/A")
     
     # Create the comparative analysis content
     content = """
@@ -898,20 +1037,15 @@ def comparative():
                 </div>
                 <div class="card-body">
                     <p>
-                        Overall, the data shows that 
-                        <strong>
-                            {% if misogyny_mean > queerphobia_mean %}
-                                misogyny was reported more frequently
-                            {% else %}
-                                queerphobia was reported more frequently
-                            {% endif %}
-                        </strong>
-                        across the surveyed contexts.
+                        Overall, the data shows that
+                        <strong>{{ highest_mean_type }}</strong>
+                        was reported most frequently across the surveyed contexts.
                     </p>
-                    <p>
-                        The greatest difference was observed in 
-                        <strong>{{ greatest_diff_context }}</strong> context.
-                    </p>
+                    <ul>
+                        <li>Misogyny: <strong>{{ "%.1f"|format(misogyny_mean) }}%</strong> average observation rate</li>
+                        <li>Queerphobia: <strong>{{ "%.1f"|format(queerphobia_mean) }}%</strong> average observation rate</li>
+                        <li>Transphobia: <strong>{{ "%.1f"|format(transphobia_mean) }}%</strong> average observation rate</li>
+                    </ul>
                 </div>
             </div>
             
@@ -924,7 +1058,7 @@ def comparative():
                             <th>Context</th>
                             <th>Misogyny Observations (%)</th>
                             <th>Queerphobia Observations (%)</th>
-                            <th>Difference (pp)</th>
+                            <th>Transphobia Observations (%)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -933,7 +1067,7 @@ def comparative():
                                 <td>{{ row.Context }}</td>
                                 <td>{{ "%.1f"|format(row['Misogyny Yes %']) }}%</td>
                                 <td>{{ "%.1f"|format(row['Queerphobia Yes %']) }}%</td>
-                                <td>{{ "%.1f"|format(row.Difference) }}pp</td>
+                                <td>{{ "%.1f"|format(row['Transphobia Yes %']) }}%</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -942,7 +1076,7 @@ def comparative():
         {% else %}
             <div class="alert alert-warning">
                 <h4 class="alert-heading">Not enough data for comparison</h4>
-                <p>There isn't enough data to perform a comparative analysis between misogyny and queerphobia observations.</p>
+                <p>There isn't enough data to perform a comparative analysis between misogyny, queerphobia, and transphobia observations.</p>
             </div>
         {% endif %}
     """
@@ -989,7 +1123,8 @@ def comparative():
         comparison_data=comparison_data,
         misogyny_mean=misogyny_mean,
         queerphobia_mean=queerphobia_mean,
-        greatest_diff_context=greatest_diff_context
+        transphobia_mean=transphobia_mean,
+        highest_mean_type=highest_mean_type
     )
 
     rendered_scripts = render_template_string(scripts,

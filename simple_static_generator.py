@@ -90,12 +90,17 @@ class SurveyAnalyzer:
     def get_charts_data(self):
         """Generate all the charts data needed for the dashboard"""
         charts = {}
-        
+
         # Gender distribution
         if 'Gender' in self.df.columns:
             gender_counts = self.df['Gender'].value_counts().reset_index()
             gender_counts.columns = ['Gender', 'Count']
-            gender_fig = px.pie(gender_counts, values='Count', names='Gender', 
+            # Convert to plain Python lists to avoid binary encoding
+            gender_data = pd.DataFrame({
+                'Gender': gender_counts['Gender'].tolist(),
+                'Count': gender_counts['Count'].astype(int).tolist()
+            })
+            gender_fig = px.pie(gender_data, values='Count', names='Gender',
                               title='Gender Distribution',
                               color_discrete_sequence=px.colors.qualitative.Set3)
             gender_fig.update_traces(textposition='inside', textinfo='percent+label')
@@ -105,19 +110,29 @@ class SurveyAnalyzer:
         if 'Q6' in self.df.columns:
             role_counts = self.df['Q6'].value_counts().reset_index().head(10)
             role_counts.columns = ['Role', 'Count']
-            role_fig = px.bar(role_counts, x='Count', y='Role', 
+            # Convert to plain Python lists
+            role_data = pd.DataFrame({
+                'Role': role_counts['Role'].tolist(),
+                'Count': role_counts['Count'].astype(int).tolist()
+            })
+            role_fig = px.bar(role_data, x='Count', y='Role',
                              title='Top 10 Roles on Campus',
                              color_discrete_sequence=['#3498db'],
                              orientation='h')
             charts['role'] = role_fig
-        
+
         # Faculty distribution
         if 'Q5' in self.df.columns:
             faculty_counts = self.df['Q5'].value_counts().reset_index()
             faculty_counts.columns = ['Faculty', 'Count']
             if 'Not Applicable' in faculty_counts['Faculty'].values:
                 faculty_counts = faculty_counts[faculty_counts['Faculty'] != 'Not Applicable']
-            faculty_fig = px.bar(faculty_counts, x='Faculty', y='Count', 
+            # Convert to plain Python lists
+            faculty_data = pd.DataFrame({
+                'Faculty': faculty_counts['Faculty'].tolist(),
+                'Count': faculty_counts['Count'].astype(int).tolist()
+            })
+            faculty_fig = px.bar(faculty_data, x='Faculty', y='Count',
                                 title='Faculty Distribution',
                                 color_discrete_sequence=['#2ecc71'])
             faculty_fig.update_layout(xaxis_tickangle=-45)
@@ -141,7 +156,15 @@ class SurveyAnalyzer:
             
             if misogyny_data:
                 misogyny_df = pd.concat(misogyny_data)
-                misogyny_fig = px.bar(misogyny_df, x='Context', y='Count', color='Response',
+                # Convert to plain Python lists
+                misogyny_df = misogyny_df.copy()
+                misogyny_df['Count'] = misogyny_df['Count'].astype(int)
+                misogyny_plot_data = pd.DataFrame({
+                    'Context': misogyny_df['Context'].tolist(),
+                    'Count': misogyny_df['Count'].tolist(),
+                    'Response': misogyny_df['Response'].tolist()
+                })
+                misogyny_fig = px.bar(misogyny_plot_data, x='Context', y='Count', color='Response',
                                     title='Observations of Misogyny in Different Contexts',
                                     color_discrete_map={'Yes': 'green', 'No': 'red', 'Unsure': 'gold'})
                 charts['misogyny'] = misogyny_fig
@@ -164,7 +187,15 @@ class SurveyAnalyzer:
             
             if queerphobia_data:
                 queerphobia_df = pd.concat(queerphobia_data)
-                queerphobia_fig = px.bar(queerphobia_df, x='Context', y='Count', color='Response',
+                # Convert to plain Python lists
+                queerphobia_df = queerphobia_df.copy()
+                queerphobia_df['Count'] = queerphobia_df['Count'].astype(int)
+                queerphobia_plot_data = pd.DataFrame({
+                    'Context': queerphobia_df['Context'].tolist(),
+                    'Count': queerphobia_df['Count'].tolist(),
+                    'Response': queerphobia_df['Response'].tolist()
+                })
+                queerphobia_fig = px.bar(queerphobia_plot_data, x='Context', y='Count', color='Response',
                                         title='Observations of Queerphobia in Different Contexts',
                                         color_discrete_map={'Yes': 'purple', 'No': 'red', 'Unsure': 'gold'})
                 charts['queerphobia'] = queerphobia_fig
@@ -458,11 +489,41 @@ def index():
     """
     
     # First render content and scripts with their context
+    # Convert charts to JSON without binary encoding
+    def fig_to_json(fig):
+        import numpy as np
+        import base64
+
+        # Function to decode binary-encoded arrays
+        def decode_binary_arrays(obj):
+            if isinstance(obj, dict):
+                # Check if this is a binary-encoded array
+                if 'dtype' in obj and 'bdata' in obj:
+                    # Decode the base64 data
+                    binary_data = base64.b64decode(obj['bdata'])
+                    # Convert to numpy array with the specified dtype
+                    dtype = np.dtype(obj['dtype'])
+                    array = np.frombuffer(binary_data, dtype=dtype)
+                    # Return as a list
+                    return array.tolist()
+                else:
+                    # Recursively process dict values
+                    return {k: decode_binary_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decode_binary_arrays(item) for item in obj]
+            return obj
+
+        # First convert to JSON with PlotlyJSONEncoder, then decode binary arrays
+        fig_json_str = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        fig_dict = json.loads(fig_json_str)
+        fig_dict = decode_binary_arrays(fig_dict)
+        return json.dumps(fig_dict)
+
     rendered_content = render_template_string(content, stats=stats)
     rendered_scripts = render_template_string(scripts,
-        gender_chart=json.dumps(charts.get('gender', go.Figure()), cls=plotly.utils.PlotlyJSONEncoder),
-        role_chart=json.dumps(charts.get('role', go.Figure()), cls=plotly.utils.PlotlyJSONEncoder),
-        faculty_chart=json.dumps(charts.get('faculty', go.Figure()), cls=plotly.utils.PlotlyJSONEncoder)
+        gender_chart=fig_to_json(charts.get('gender', go.Figure())),
+        role_chart=fig_to_json(charts.get('role', go.Figure())),
+        faculty_chart=fig_to_json(charts.get('faculty', go.Figure()))
     )
     
     # Then render the main template with the rendered content/scripts
@@ -524,10 +585,31 @@ def misogyny():
     </script>
     """
     
+    # Convert charts to JSON without binary encoding
+    def fig_to_json(fig):
+        import numpy as np
+        import base64
+        def decode_binary_arrays(obj):
+            if isinstance(obj, dict):
+                if 'dtype' in obj and 'bdata' in obj:
+                    binary_data = base64.b64decode(obj['bdata'])
+                    dtype = np.dtype(obj['dtype'])
+                    array = np.frombuffer(binary_data, dtype=dtype)
+                    return array.tolist()
+                else:
+                    return {k: decode_binary_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decode_binary_arrays(item) for item in obj]
+            return obj
+        fig_json_str = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        fig_dict = json.loads(fig_json_str)
+        fig_dict = decode_binary_arrays(fig_dict)
+        return json.dumps(fig_dict)
+
     # Render content and scripts
     rendered_content = render_template_string(content, text_examples=text_examples)
     rendered_scripts = render_template_string(scripts,
-        misogyny_chart=json.dumps(chart, cls=plotly.utils.PlotlyJSONEncoder)
+        misogyny_chart=fig_to_json(chart)
     )
     
     # Render the main template
@@ -544,28 +626,28 @@ def queerphobia():
     analyzer = SurveyAnalyzer('data/survey_data.csv')
     charts = analyzer.get_charts_data()
     text_analysis = analyzer.analyze_text('Q20_10_TEXT')
-    
+
     # Default values for the template
     chart = go.Figure()
     text_examples = []
-    
+
     if 'queerphobia' in charts:
         chart = charts['queerphobia']
-    
+
     if text_analysis:
         text_examples = text_analysis['sample_responses']
-    
+
     # Create the queerphobia page content
     content = """
         <h2 class="mb-4">Queerphobia Analysis</h2>
-        
+
         <!-- Main chart -->
         <div class="row mb-4">
             <div class="col-12 chart-container">
                 <div id="queerphobia-chart"></div>
             </div>
         </div>
-        
+
         <!-- Text examples -->
         <h4 class="mb-3">Selected Response Examples</h4>
         {% if text_examples %}
@@ -579,7 +661,7 @@ def queerphobia():
             <p>No text responses available for the selected filters.</p>
         {% endif %}
     """
-    
+
     # Create the scripts for charts
     scripts = """
     <script>
@@ -588,13 +670,34 @@ def queerphobia():
         Plotly.newPlot('queerphobia-chart', queerphobiaData.data, queerphobiaData.layout);
     </script>
     """
-    
+
+    # Convert charts to JSON without binary encoding
+    def fig_to_json(fig):
+        import numpy as np
+        import base64
+        def decode_binary_arrays(obj):
+            if isinstance(obj, dict):
+                if 'dtype' in obj and 'bdata' in obj:
+                    binary_data = base64.b64decode(obj['bdata'])
+                    dtype = np.dtype(obj['dtype'])
+                    array = np.frombuffer(binary_data, dtype=dtype)
+                    return array.tolist()
+                else:
+                    return {k: decode_binary_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decode_binary_arrays(item) for item in obj]
+            return obj
+        fig_json_str = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        fig_dict = json.loads(fig_json_str)
+        fig_dict = decode_binary_arrays(fig_dict)
+        return json.dumps(fig_dict)
+
     # Render content and scripts
     rendered_content = render_template_string(content, text_examples=text_examples)
     rendered_scripts = render_template_string(scripts,
-        queerphobia_chart=json.dumps(chart, cls=plotly.utils.PlotlyJSONEncoder)
+        queerphobia_chart=fig_to_json(chart)
     )
-    
+
     # Render the main template
     return render_template_string(
         HTML_TEMPLATE,
@@ -714,6 +817,28 @@ def text_analysis():
     </script>
     """
     
+    # Convert charts to JSON without binary encoding
+    def fig_to_json_or_none(fig_str):
+        if fig_str is None:
+            return None
+        fig_dict = json.loads(fig_str)
+        def convert_arrays(obj):
+            if isinstance(obj, dict):
+                return {k: convert_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_arrays(item) for item in obj]
+            elif hasattr(obj, 'tolist'):
+                return obj.tolist()
+            return obj
+        return json.dumps(convert_arrays(fig_dict))
+
+    # Convert all field visualizations
+    for field_value, viz in field_viz.items():
+        if viz['word_freq_fig']:
+            viz['word_freq_fig'] = fig_to_json_or_none(viz['word_freq_fig'])
+        if viz['theme_fig']:
+            viz['theme_fig'] = fig_to_json_or_none(viz['theme_fig'])
+
     # Pre-render content and scripts with their context
     rendered_content = render_template_string(content_template, text_fields=text_fields, field_viz=field_viz)
     rendered_scripts = render_template_string(scripts_template, text_fields=text_fields, field_viz=field_viz)
@@ -837,19 +962,40 @@ def comparative():
     </script>
     """
     
+    # Convert charts to JSON without binary encoding
+    def fig_to_json(fig):
+        import numpy as np
+        import base64
+        def decode_binary_arrays(obj):
+            if isinstance(obj, dict):
+                if 'dtype' in obj and 'bdata' in obj:
+                    binary_data = base64.b64decode(obj['bdata'])
+                    dtype = np.dtype(obj['dtype'])
+                    array = np.frombuffer(binary_data, dtype=dtype)
+                    return array.tolist()
+                else:
+                    return {k: decode_binary_arrays(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [decode_binary_arrays(item) for item in obj]
+            return obj
+        fig_json_str = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+        fig_dict = json.loads(fig_json_str)
+        fig_dict = decode_binary_arrays(fig_dict)
+        return json.dumps(fig_dict)
+
     # Render content and scripts
-    rendered_content = render_template_string(content, 
+    rendered_content = render_template_string(content,
         has_comparison_data=has_comparison_data,
         comparison_data=comparison_data,
         misogyny_mean=misogyny_mean,
         queerphobia_mean=queerphobia_mean,
         greatest_diff_context=greatest_diff_context
     )
-    
+
     rendered_scripts = render_template_string(scripts,
         has_comparison_data=has_comparison_data,
-        bar_chart=json.dumps(bar_chart, cls=plotly.utils.PlotlyJSONEncoder),
-        radar_chart=json.dumps(radar_chart, cls=plotly.utils.PlotlyJSONEncoder)
+        bar_chart=fig_to_json(bar_chart),
+        radar_chart=fig_to_json(radar_chart)
     )
     
     # Render the main template

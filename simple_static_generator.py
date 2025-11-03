@@ -423,8 +423,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
     <div class="container">
         <h1 class="text-center">3C+ Dashboard</h1>
-        <h5 class="text-center text-muted mb-4">Results as of {{ current_date }}</h5>
-        
+
         <!-- Navigation -->
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
             <div class="container-fluid">
